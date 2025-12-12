@@ -1,30 +1,19 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
-// Detect local dev mode
 const isLocalDev =
-  !process.env.SMTP_USER || process.env.SMTP_USER === 'your-email@gmail.com';
+  !process.env.RESEND_API_KEY ||
+  process.env.RESEND_API_KEY === 'your-resend-api-key';
 
-const transporter = isLocalDev
-  ? null // Don't create transporter for local dev
-  : nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
+const resend = isLocalDev ? null : new Resend(process.env.RESEND_API_KEY);
 
 interface EmailOptions {
   to: string;
   subject: string;
   html: string;
-  resetUrl?: string; // For local dev logging
+  resetUrl?: string;
 }
 
 export async function sendEmail({ to, subject, html, resetUrl }: EmailOptions) {
-  // Local dev: log to console instead of sending email
   if (isLocalDev) {
     console.log('\n========================================');
     console.log('📧 LOCAL DEV EMAIL (not actually sent)');
@@ -38,19 +27,26 @@ export async function sendEmail({ to, subject, html, resetUrl }: EmailOptions) {
     return { success: true };
   }
 
-  // Production: send via SMTP
-  if (!transporter) {
-    console.error('Email transporter not configured');
-    return { success: false, error: 'SMTP not configured' };
+  if (!resend) {
+    console.error('Resend client not configured');
+    return { success: false, error: 'Resend not configured' };
   }
 
   try {
-    await transporter.sendMail({
-      from: `"SenpaiScholars" <${process.env.SMTP_USER}>`,
+    const { error } = await resend.emails.send({
+      from:
+        process.env.RESEND_FROM_EMAIL ||
+        'SenpaiScholars <delivered@resend.dev>',
       to,
       subject,
       html,
     });
+
+    if (error) {
+      console.error('Email send error:', error);
+      return { success: false, error };
+    }
+
     console.log(`[Email] Sent to ${to}: ${subject}`);
     return { success: true };
   } catch (error) {
